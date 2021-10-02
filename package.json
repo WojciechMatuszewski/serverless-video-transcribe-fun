@@ -1,0 +1,45 @@
+{
+  "name": "serverless-transcribe",
+  "version": "0.1.0",
+  "bin": {
+    "serverless-transcribe": "bin/serverless-transcribe.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "bootstrap": "npm run cdk bootstrap",
+    "build-layer": "cd layer && make build",
+    "deploy": "npm run cdk deploy -- --hotswap --no-rollback"
+  },
+  "devDependencies": {
+    "@aws-cdk/assert": "1.124.0",
+    "@types/jest": "^26.0.10",
+    "@types/node": "10.17.27",
+    "jest": "^26.4.2",
+    "ts-jest": "^26.2.0",
+    "aws-cdk": "1.124.0",
+    "ts-node": "^9.0.0",
+    "typescript": "~3.9.7"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-apigatewayv2": "1.124.0",
+    "@aws-cdk/aws-apigatewayv2-integrations": "1.124.0",
+    "@aws-cdk/aws-datasync": "1.124.0",
+    "@aws-cdk/aws-ec2": "1.124.0",
+    "@aws-cdk/aws-efs": "1.124.0",
+    "@aws-cdk/aws-events": "1.124.0",
+    "@aws-cdk/aws-events-targets": "1.124.0",
+    "@aws-cdk/aws-iam": "1.124.0",
+    "@aws-cdk/aws-lambda-destinations": "1.124.0",
+    "@aws-cdk/aws-lambda-go": "1.124.0",
+    "@aws-cdk/aws-s3": "1.124.0",
+    "@aws-cdk/aws-s3-notifications": "1.124.0",
+    "@aws-cdk/aws-stepfunctions": "1.124.0",
+    "@aws-cdk/aws-stepfunctions-tasks": "1.124.0",
+    "@aws-cdk/core": "1.124.0",
+    "@types/aws-lambda": "8.10.83",
+    "source-map-support": "^0.5.16"
+  }
+}
