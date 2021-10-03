@@ -63,3 +63,10 @@
   [Here is a great resource to learn more](https://awsteele.com/blog/2020/12/24/aws-lambda-latest-is-dangerous.html).
 
 - It would be super nice to be able to upload things from EFS to S3 directly via StepFunctions SDK integrations but I think I'm asking for a bit too much.
+
+- Do not forget about the difference between _resource policies_ and the _identity-based policies_.
+  [Here is the link to the docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html).
+
+- The `startTranscribeJob` is an asynchronous task. Despite it being asynchronous, the permissions to carry out the whole flow (like uploading the result to the bucket) are checked at the invoke time. It seems to me like the _AWS Transcribe_ service uses the credentials that the request was made with to carry out all of it's operations.
+  - Can I use `assumedBy` here?
+  - How does the "ambient" role assumption works?

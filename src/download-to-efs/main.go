@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -20,13 +21,28 @@ func main() {
 func handler(ctx context.Context, event events.S3Event) {
 	record := event.Records[0]
 
+	rootPath := "/mnt/videos"
+
+	keyParts := strings.Split(record.S3.Object.Key, "/")
+	keyDir := strings.Join(keyParts[:len(keyParts)-1], "/")
+
+	downloadDirLocation := fmt.Sprintf("%v/%v", rootPath, keyDir)
+	fmt.Println("Creating directory for the file", downloadDirLocation)
+	err := os.MkdirAll(downloadDirLocation, os.ModePerm)
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		fmt.Println(err)
 		panic(err)
 	}
 
-	fPath := filepath.Join("/mnt/videos", record.S3.Object.Key)
+	downloadToLocation := fmt.Sprintf("%v/%v", rootPath, record.S3.Object.Key)
+	fmt.Println("Downloading file to", downloadToLocation)
+	fPath := filepath.Join(downloadToLocation)
 	fd, err := os.Create(fPath)
 	if err != nil {
 		fmt.Println(err)

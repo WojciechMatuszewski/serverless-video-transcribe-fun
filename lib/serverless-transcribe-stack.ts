@@ -93,7 +93,9 @@ export class ServerlessTranscribeStack extends cdk.Stack {
           "/mnt/videos"
         ),
         onSuccess: new lambdaDestinations.EventBridgeDestination(eventBus),
-        retryAttempts: 0
+        retryAttempts: 0,
+        timeout: cdk.Duration.seconds(20),
+        memorySize: 3062
       }
     );
 
@@ -108,7 +110,11 @@ export class ServerlessTranscribeStack extends cdk.Stack {
 
     dataBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
-      new s3Notifications.LambdaDestination(downloadToEFSFunction)
+      new s3Notifications.LambdaDestination(downloadToEFSFunction),
+      {
+        prefix: "input/",
+        suffix: "mp4"
+      }
     );
 
     const onFileReadyRule = new events.Rule(this, "onFileReady", {
@@ -149,9 +155,6 @@ export class ServerlessTranscribeStack extends cdk.Stack {
 
     const parseEvent = new sfn.Pass(this, "parseEvent", {
       parameters: {
-        fileName: sfn.JsonPath.stringAt(
-          "$.detail.requestPayload.Records[0].s3.object.key"
-        ),
         filePath: sfn.JsonPath.stringAt(
           "States.Format('/mnt/videos/{}', $.detail.requestPayload.Records[0].s3.object.key)"
         )
@@ -167,13 +170,13 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         chunk: sfn.JsonPath.stringAt("$$.Map.Item.Value"),
         originFilePath: sfn.JsonPath.stringAt("$.filePath"),
         s3OutputDirectory: sfn.JsonPath.stringAt(
-          "States.Format('videos/{}', $$.Execution.Name)"
+          "States.Format('chunks/{}', $$.Execution.Name)"
         ),
         efsOutputDirectory: sfn.JsonPath.stringAt(
-          "States.Format('/mnt/videos/{}', $$.Execution.Name)"
+          "States.Format('/mnt/videos/chunks/{}', $$.Execution.Name)"
         ),
         outputFileName: sfn.JsonPath.stringAt(
-          "States.Format('{}_{}', $$.Map.Item.Index, $.fileName)"
+          "States.Format('{}.mp4', $$.Map.Item.Index)"
         )
       }
     });
@@ -227,9 +230,6 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       payloadResponseOnly: true,
       resultPath: sfn.JsonPath.DISCARD
     });
-    /**
-     *   "cause": "The specified S3 bucket can't be accessed. Make sure you have write permission on the bucket and try your request again. (Service: Transcribe, Status Code: 400, Request ID: 1f28ecb0-52fb-463b-9e66-791fc67c447b, Extended Request ID: null)"
-     */
     const runTranscribeTask = new sfn.CustomState(this, "runTranscribe", {
       stateJson: {
         Type: "Task",
@@ -242,10 +242,10 @@ export class ServerlessTranscribeStack extends cdk.Stack {
           },
           OutputBucketName: dataBucket.bucketName,
           "OutputKey.$": sfn.JsonPath.stringAt(
-            "States.Format('subtitles/{}', $$.Execution.Name)"
+            "States.Format('subtitles/{}/{}.json', $$.Execution.Name, $.outputFileName)"
           ),
           "TranscriptionJobName.$": sfn.JsonPath.stringAt(
-            "States.Format('job_{}', $.outputFileName)"
+            "States.Format('job_{}_{}', $$.Execution.Name, $.outputFileName)"
           ),
           LanguageCode: "en-GB"
         }
@@ -269,6 +269,21 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: ["transcribe:StartTranscriptionJob"],
         resources: ["*"]
+      })
+    );
+
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [dataBucket.arnForObjects("subtitles/*")],
+        actions: ["s3:PutObject"]
+      })
+    );
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [dataBucket.arnForObjects("chunks/*")],
+        actions: ["s3:GetObject"]
       })
     );
 

@@ -35,7 +35,7 @@ func NewHandler() Handler {
 		fmt.Println("Duration", d)
 
 		fmt.Println("Splitting duration into 5 seconds chunks")
-		chunks, err := durationToChunks(d, 5.0)
+		chunks, err := durationToChunks(d, 20.0)
 		if err != nil {
 			fmt.Println(err)
 			panic(err)

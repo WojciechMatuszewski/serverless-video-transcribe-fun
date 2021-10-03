@@ -43,7 +43,7 @@ func NewHandler() Handler {
 		out, err := psClient.PresignPutObject(
 			ctx,
 			&s3.PutObjectInput{
-				Key:    aws.String("movie123.mp4"),
+				Key:    aws.String("input/file.mp4"),
 				Bucket: aws.String(bucket),
 			},
 			s3.WithPresignExpires(time.Minute*5),
