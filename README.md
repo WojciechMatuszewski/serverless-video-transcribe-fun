@@ -68,5 +68,13 @@
   [Here is the link to the docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html).
 
 - The `startTranscribeJob` is an asynchronous task. Despite it being asynchronous, the permissions to carry out the whole flow (like uploading the result to the bucket) are checked at the invoke time. It seems to me like the _AWS Transcribe_ service uses the credentials that the request was made with to carry out all of it's operations.
+
   - Can I use `assumedBy` here?
   - How does the "ambient" role assumption works?
+  - ConditionKey can be `null`? https://docs.aws.amazon.com/transcribe/latest/dg/security_iam_service-with-iam.html
+
+- Creating state loops with CDK is a bit weird. Since you cannot refer to the state that wraps the loops within the loop itself,
+  the loop is created "implicitly". For example, I though that by doing `task1.next(task2).next(choice("condition", task1).otherwise(endState))` I would need to specify the loop again with the `("condition", task1)` portion of the definition, but that is not the case.
+
+- _AWS Athena_ is a really nice service. With zero knowledge on how the service operates I was able to query the subtitle chunks to concatenate them together. Sadly the CloudFormation support is lacking a tiny bit. It would be super nice to have a built-in resource for making queries.
+  Having said that though, the ability to create _AWS Glue_ tables through CFN is nice.

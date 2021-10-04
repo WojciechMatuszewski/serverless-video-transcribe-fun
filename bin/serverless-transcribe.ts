@@ -4,7 +4,7 @@ import * as cdk from "@aws-cdk/core";
 import { ServerlessTranscribeStack } from "../lib/serverless-transcribe-stack";
 
 const app = new cdk.App();
-new ServerlessTranscribeStack(app, "ServerlessTranscribeStack2", {
+new ServerlessTranscribeStack(app, "ServerlessTranscribeStack3", {
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */

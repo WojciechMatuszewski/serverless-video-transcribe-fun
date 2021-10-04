@@ -14,6 +14,7 @@ import * as events from "@aws-cdk/aws-events";
 import * as eventTargets from "@aws-cdk/aws-events-targets";
 import * as sfn from "@aws-cdk/aws-stepfunctions";
 import * as sfnTasks from "@aws-cdk/aws-stepfunctions-tasks";
+import * as glue from "@aws-cdk/aws-glue";
 
 import { join } from "path";
 
@@ -25,7 +26,8 @@ export class ServerlessTranscribeStack extends cdk.Stack {
 
     const dataBucket = new s3.Bucket(this, "dataBucket", {
       accessControl: s3.BucketAccessControl.PRIVATE,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
     const createPresignedUrlFunction = new lambdaGo.GoFunction(
@@ -178,7 +180,8 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         outputFileName: sfn.JsonPath.stringAt(
           "States.Format('{}.mp4', $$.Map.Item.Index)"
         )
-      }
+      },
+      resultPath: sfn.JsonPath.DISCARD
     });
 
     const splitVideoFunction = new lambdaGo.GoFunction(
@@ -230,6 +233,7 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       payloadResponseOnly: true,
       resultPath: sfn.JsonPath.DISCARD
     });
+
     const runTranscribeTask = new sfn.CustomState(this, "runTranscribe", {
       stateJson: {
         Type: "Task",
@@ -256,9 +260,116 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       .next(uploadToS3Task)
       .next(runTranscribeTask);
 
+    const checkTranscribeFunction = new lambdaGo.GoFunction(
+      this,
+      "checkTranscribeFunction",
+      {
+        entry: join(__dirname, "../src/check-transcribe"),
+        retryAttempts: 0,
+        memorySize: 2048,
+        timeout: cdk.Duration.seconds(20)
+      }
+    );
+    checkTranscribeFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["transcribe:ListTranscriptionJobs"],
+        resources: ["*"]
+      })
+    );
+    const checkTranscribeTask = new sfnTasks.LambdaInvoke(
+      this,
+      "checkTranscribe",
+      {
+        lambdaFunction: checkTranscribeFunction,
+        payloadResponseOnly: true,
+        resultPath: "$.isTranscriptionReady",
+        payload: sfn.TaskInput.fromObject({
+          executionName: sfn.JsonPath.stringAt("$$.Execution.Name")
+        })
+      }
+    );
+
+    const sleepBetweenChecks = new sfn.Wait(this, "sleepBetweenChecks", {
+      time: sfn.WaitTime.duration(cdk.Duration.seconds(30))
+    });
+
+    const glueDatabase = new glue.Database(this, "subtitlesDatabase", {
+      /**
+       * The name cannot contain uppercase characters.
+       */
+      databaseName: "subtitlesdatabase"
+    });
+    const glueTable = new glue.Table(this, "subtitlesTable", {
+      database: glueDatabase,
+      /**
+       * The name cannot contain uppercase characters.
+       */
+      tableName: "subtitlestable",
+      columns: [
+        { name: "jobName", type: glue.Schema.STRING },
+        {
+          name: "results",
+          type: glue.Schema.array(
+            glue.Schema.struct([
+              {
+                name: "transcripts",
+                type: glue.Schema.array(
+                  glue.Schema.struct([
+                    {
+                      name: "transcript",
+                      type: glue.Schema.STRING
+                    }
+                  ])
+                )
+              }
+            ])
+          )
+        }
+      ],
+      dataFormat: glue.DataFormat.JSON,
+      bucket: dataBucket,
+      s3Prefix: "subtitles/"
+    });
+    //User: arn:aws:sts::xx:assumed-role/ServerlessTranscribeStack-stateMachineRole64DF9B42-LGZHEFVA0V3E/YhWaCwujSLLGXgpfchrSVFgcFSStxXML is not authorized to perform: glue:GetTable on resource: arn:aws:glue:us-east-1:xx:catalog
+    const concatSubtitlesTask = new sfn.CustomState(this, "concatSubtitles", {
+      stateJson: {
+        Type: "Task",
+        Resource: "arn:aws:states:::aws-sdk:athena:startQueryExecution",
+        Parameters: {
+          "ClientRequestToken.$": "$$.Execution.Name",
+          "QueryString.$": sfn.JsonPath.stringAt(
+            `States.Format('select results[1].transcripts[1].transcript from subtitles where jobName like "job_{}_%.json" ORDER BY jobName', $$.Execution.Name)`
+          ),
+          ResultConfiguration: {
+            "OutputLocation.$": sfn.JsonPath.stringAt(
+              `States.Format('s3://${dataBucket.bucketName}/subtitles/{}/result/', $$.Execution.Name)`
+            )
+          },
+          QueryExecutionContext: {
+            Database: glueDatabase.databaseName
+          }
+        }
+      }
+    });
+
+    const waitForTranscribeLoop = sleepBetweenChecks
+      .next(checkTranscribeTask)
+      .next(
+        new sfn.Choice(this, "isTranscriptionDone")
+          .when(
+            sfn.Condition.booleanEquals("$.isTranscriptionReady", false),
+            sleepBetweenChecks
+          )
+          // .otherwise(concatSubtitlesTask)
+          .otherwise(new sfn.Succeed(this, "Done"))
+      );
+
     const stateMachineDefinition = parseEvent
+      .next(concatSubtitlesTask)
       .next(createChunksTask)
-      .next(iterateOverChunks.iterator(chunkWorker));
+      .next(iterateOverChunks.iterator(chunkWorker))
+      .next(waitForTranscribeLoop);
 
     const stateMachine = new sfn.StateMachine(this, "stateMachine", {
       definition: stateMachineDefinition
@@ -279,11 +390,20 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         actions: ["s3:PutObject"]
       })
     );
+
     stateMachine.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: [dataBucket.arnForObjects("chunks/*")],
         actions: ["s3:GetObject"]
+      })
+    );
+
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: ["*"],
+        actions: ["athena:StartQueryExecution"]
       })
     );
 
