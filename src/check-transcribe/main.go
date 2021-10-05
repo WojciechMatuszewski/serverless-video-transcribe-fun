@@ -23,7 +23,6 @@ type Handler func(ctx context.Context, input Input) (bool, error)
 
 func NewHandler() Handler {
 	return func(ctx context.Context, input Input) (bool, error) {
-		fmt.Println("Loading config")
 		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
 			fmt.Println(err)
@@ -36,6 +35,7 @@ func NewHandler() Handler {
 		})
 
 		fmt.Println("Fetching summaries for ExecutionName", input.ExecutionName)
+
 		var summaries []types.TranscriptionJobSummary
 		for paginator.HasMorePages() {
 			jobs, err := paginator.NextPage(ctx)
@@ -50,7 +50,6 @@ func NewHandler() Handler {
 		fmt.Println("Fetched", len(summaries), "summaries")
 
 		if len(summaries) == 0 {
-			fmt.Println("No jobs!")
 			panic("No jobs!")
 		}
 
@@ -61,6 +60,8 @@ func NewHandler() Handler {
 				break
 			}
 		}
+
+		fmt.Println("Are all jobs finished?", isDone)
 
 		return isDone, nil
 	}

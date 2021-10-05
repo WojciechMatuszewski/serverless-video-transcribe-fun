@@ -30,7 +30,6 @@ func NewHandler() Handler {
 			return err
 		}
 
-		fmt.Println("Running the ffmpeg command")
 		cmd := exec.Command(
 			"/opt/ffmpeg",
 			"-i", input.OriginFilePath,
@@ -41,8 +40,11 @@ func NewHandler() Handler {
 		fmt.Println("Invoking", cmd.String())
 
 		out, err := cmd.CombinedOutput()
-		fmt.Println(string(out), err)
+		fmt.Println("Command output", string(out))
+		if err != nil {
+			return err
+		}
 
-		return err
+		return nil
 	}
 }

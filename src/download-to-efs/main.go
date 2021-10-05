@@ -28,24 +28,23 @@ func handler(ctx context.Context, event events.S3Event) {
 
 	downloadDirLocation := fmt.Sprintf("%v/%v", rootPath, keyDir)
 	fmt.Println("Creating directory for the file", downloadDirLocation)
+
 	err := os.MkdirAll(downloadDirLocation, os.ModePerm)
 	if err != nil {
-		fmt.Println(err)
 		panic(err)
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		fmt.Println(err)
 		panic(err)
 	}
 
 	downloadToLocation := fmt.Sprintf("%v/%v", rootPath, record.S3.Object.Key)
 	fmt.Println("Downloading file to", downloadToLocation)
+
 	fPath := filepath.Join(downloadToLocation)
 	fd, err := os.Create(fPath)
 	if err != nil {
-		fmt.Println(err)
 		panic(err)
 	}
 	defer fd.Close()
@@ -60,7 +59,6 @@ func handler(ctx context.Context, event events.S3Event) {
 		},
 	)
 	if err != nil {
-		fmt.Println(err)
 		panic(err)
 	}
 

@@ -26,13 +26,14 @@ func NewHandler() Handler {
 	return func(ctx context.Context, input Input) ([][]float64, error) {
 
 		fmt.Println("Reading movie duration")
+
 		d, err := getMovieDuration(input.FilePath)
 		if err != nil {
 			fmt.Println(err)
 			panic(err)
 		}
 
-		fmt.Println("Duration", d)
+		fmt.Println("Movie duration", d)
 
 		fmt.Println("Splitting duration into 5 seconds chunks")
 		chunks, err := durationToChunks(d, 20.0)
@@ -41,7 +42,7 @@ func NewHandler() Handler {
 			panic(err)
 		}
 
-		fmt.Println("Chunks", chunks)
+		fmt.Println("Computed chunks", chunks)
 
 		return chunks, nil
 	}

@@ -331,20 +331,22 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       bucket: dataBucket,
       s3Prefix: "subtitles/"
     });
-    //User: arn:aws:sts::xx:assumed-role/ServerlessTranscribeStack-stateMachineRole64DF9B42-LGZHEFVA0V3E/YhWaCwujSLLGXgpfchrSVFgcFSStxXML is not authorized to perform: glue:GetTable on resource: arn:aws:glue:us-east-1:xx:catalog
+
     const concatSubtitlesTask = new sfn.CustomState(this, "concatSubtitles", {
       stateJson: {
         Type: "Task",
-        Resource: "arn:aws:states:::aws-sdk:athena:startQueryExecution",
+        Resource: "arn:aws:states:::athena:startQueryExecution.sync",
         Parameters: {
           "ClientRequestToken.$": "$$.Execution.Name",
-          "QueryString.$": sfn.JsonPath.stringAt(
-            `States.Format('select results[1].transcripts[1].transcript from subtitles where jobName like "job_{}_%.json" ORDER BY jobName', $$.Execution.Name)`
-          ),
+          "QueryString.$":
+            /**
+             * Problem with escaping.
+             * The `States.Format` has to use single quotes but the like condition also has to use single quotes
+             * What to do?
+             */
+            "States.Format(\"select results[1].transcripts[1].transcript from subtitlestable where jobName like 'job_{}_%.mp4' ORDER BY jobName\", $$.Execution.Name)",
           ResultConfiguration: {
-            "OutputLocation.$": sfn.JsonPath.stringAt(
-              `States.Format('s3://${dataBucket.bucketName}/subtitles/{}/result/', $$.Execution.Name)`
-            )
+            "OutputLocation.$": `States.Format('s3://${dataBucket.bucketName}/subtitles/{}/result/', $$.Execution.Name)`
           },
           QueryExecutionContext: {
             Database: glueDatabase.databaseName
@@ -353,20 +355,21 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       }
     });
 
+    const isTranscriptionDoneChoice = new sfn.Choice(
+      this,
+      "isTranscriptionDone"
+    )
+      .when(
+        sfn.Condition.booleanEquals("$.isTranscriptionReady", false),
+        sleepBetweenChecks
+      )
+      .otherwise(concatSubtitlesTask);
+
     const waitForTranscribeLoop = sleepBetweenChecks
       .next(checkTranscribeTask)
-      .next(
-        new sfn.Choice(this, "isTranscriptionDone")
-          .when(
-            sfn.Condition.booleanEquals("$.isTranscriptionReady", false),
-            sleepBetweenChecks
-          )
-          // .otherwise(concatSubtitlesTask)
-          .otherwise(new sfn.Succeed(this, "Done"))
-      );
+      .next(isTranscriptionDoneChoice);
 
     const stateMachineDefinition = parseEvent
-      .next(concatSubtitlesTask)
       .next(createChunksTask)
       .next(iterateOverChunks.iterator(chunkWorker))
       .next(waitForTranscribeLoop);
@@ -404,6 +407,36 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         resources: ["*"],
         actions: ["athena:StartQueryExecution"]
+      })
+    );
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [
+          glueDatabase.catalogArn,
+          glueTable.tableArn,
+          glueDatabase.databaseArn
+        ],
+        actions: ["glue:GetTable"]
+      })
+    );
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [dataBucket.bucketArn],
+        actions: ["s3:GetBucketLocation"]
+      })
+    );
+    stateMachine.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [dataBucket.bucketArn],
+        actions: [
+          "s3:GetBucket",
+          "s3:ListBucketMultipartUploads",
+          "s3:ListMultipartUploadParts",
+          "s3:AbortMultipartUpload"
+        ]
       })
     );
 
