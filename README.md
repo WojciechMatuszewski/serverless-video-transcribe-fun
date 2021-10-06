@@ -1,7 +1,5 @@
 # Serverless transcribe
 
-**Work in progress**
-
 1. Build the ffmpeg layer
 
    ```shell
@@ -19,6 +17,16 @@
    ```shell
    npm run deploy
    ```
+
+4. Use the `apiUrl` output to get a presigned URL
+
+   ```shell
+   curl -X GET API_URL_ENDPOINT | jq
+   ```
+
+5. Use the returned presigned URL to upload an `.mp4` file you wish to generate subtitles for.
+
+6. The subtitles for the video you have just uploaded will be available inside the S3 bucket (see the CloudFormation outputs) under `subtitles/STEP_FUNCTION_EXECUTION_NAME/result/STEP_FUNCTION_EXECUTION_NAME.csv`.
 
 ## Learnings
 
@@ -76,8 +84,8 @@
 - _AWS Athena_ is a nice service. With zero knowledge of how the service operates, I was able to query the subtitle chunks to concatenate them together. Sadly the CloudFormation support is lacking a tiny bit. It would be super nice to have a built-in resource for making queries.
   Having said that, though, the ability to create _AWS Glue_ tables through CFN and the integration with StepFunctions is excellent.
 
-- I faced some issues with Athena query formatting. I had to escape the double quotes so that I can put the _like_ condition within a single quote.
-  Wrapping the _like_ clause within a single quote is required, otherwise the query will not work and be rejected by Athena.
+- I faced some issues with Athena query formatting. The Athena query I wanted to perform required the `like` condition. Contents of the `like` condition have to be wrapped with single quotes. This is a bit unfortunate as the body of the `States.Format` also has to be wrapped in single quotes.
+  I was able to make it work by escaping the single quotes around the `like` condition with double slashes – `like \\'foo.bar\\'`
 
 - > Athena supports CSV output files only. If you want to store query output files in a different format, use a CREATE TABLE AS SELECT (CTAS) query and configure the format property. After the query completes, drop the CTAS table.
 
@@ -85,3 +93,6 @@
 
   - Use an [_S3 Object Lambda_](https://aws.amazon.com/s3/features/object-lambda/) to transform the file dynamically
   - Use _S3 trigger_ to do that after the Athena query finishes.
+
+- Some of the _optimized_ `.sync` StepFunctions integrations are really pooling the result for you.
+  A good example would be the Athena `StartQueryExecution` integration. The call is asynchronous in nature and returns an execution token.

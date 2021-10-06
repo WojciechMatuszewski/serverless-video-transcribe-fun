@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,20 +30,27 @@ func NewHandler() Handler {
 
 		d, err := getMovieDuration(input.FilePath)
 		if err != nil {
-			fmt.Println(err)
 			panic(err)
 		}
 
 		fmt.Println("Movie duration", d)
 
-		fmt.Println("Splitting duration into 5 seconds chunks")
-		chunks, err := durationToChunks(d, 20.0)
+		rawChunkSize := os.Getenv("CHUNK_SIZE_SECONDS")
+		if rawChunkSize == "" {
+			panic(errors.New("CHUNK_SIZE_SECONDS environment variable not found"))
+		}
+
+		chunkSize, err := strconv.ParseFloat(rawChunkSize, 64)
 		if err != nil {
-			fmt.Println(err)
 			panic(err)
 		}
 
-		fmt.Println("Computed chunks", chunks)
+		fmt.Printf("Splitting duration into %v seconds chunks", chunkSize)
+
+		chunks, err := durationToChunks(d, chunkSize)
+		if err != nil {
+			panic(err)
+		}
 
 		return chunks, nil
 	}

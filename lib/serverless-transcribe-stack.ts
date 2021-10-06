@@ -145,7 +145,10 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         retryAttempts: 0,
         layers: [ffmpegLayer],
         memorySize: 2048,
-        timeout: cdk.Duration.seconds(10)
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          CHUNK_SIZE_SECONDS: "30"
+        }
       }
     );
 
@@ -249,7 +252,7 @@ export class ServerlessTranscribeStack extends cdk.Stack {
             "States.Format('subtitles/{}/{}.json', $$.Execution.Name, $.outputFileName)"
           ),
           "TranscriptionJobName.$": sfn.JsonPath.stringAt(
-            "States.Format('job_{}_{}', $$.Execution.Name, $.outputFileName)"
+            "States.Format('{}_{}', $$.Execution.Name, $.outputFileName)"
           ),
           LanguageCode: "en-GB"
         }
@@ -307,7 +310,10 @@ export class ServerlessTranscribeStack extends cdk.Stack {
        */
       tableName: "subtitlestable",
       columns: [
-        { name: "jobName", type: glue.Schema.STRING },
+        {
+          name: "jobName",
+          type: glue.Schema.STRING
+        },
         {
           name: "results",
           type: glue.Schema.array(
@@ -331,7 +337,9 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       bucket: dataBucket,
       s3Prefix: "subtitles/"
     });
-
+    /**
+     * com.amazonaws.services.s3.model.AmazonS3Exception: Access Denied (Service: Amazon S3; Status Code: 403; Error Code: AccessDenied; Request ID: 7CKGCMSTYH4SSGSB; S3 Extended Request ID: vR79Ne+vHE0VgND/YWh/k/iwnhn9dtytzqJFYDtC0fHqrgmCFoohG5v2tqCPgQYbS6/okVKPFpU=; Proxy: null), S3 Extended Request ID: vR79Ne+vHE0VgND/YWh/k/iwnhn9dtytzqJFYDtC0fHqrgmCFoohG5v2tqCPgQYbS6/okVKPFpU= (Path: s3://serverlesstranscribestack3-databucketd8691f4e-1uvmls64s9fxx/subtitles)
+     */
     const concatSubtitlesTask = new sfn.CustomState(this, "concatSubtitles", {
       stateJson: {
         Type: "Task",
@@ -339,12 +347,7 @@ export class ServerlessTranscribeStack extends cdk.Stack {
         Parameters: {
           "ClientRequestToken.$": "$$.Execution.Name",
           "QueryString.$":
-            /**
-             * Problem with escaping.
-             * The `States.Format` has to use single quotes but the like condition also has to use single quotes
-             * What to do?
-             */
-            "States.Format(\"select results[1].transcripts[1].transcript from subtitlestable where jobName like 'job_{}_%.mp4' ORDER BY jobName\", $$.Execution.Name)",
+            "States.Format('select results[1].transcripts[1].transcript from subtitlestable WHERE jobName LIKE \\'{}_%.mp4\\' ORDER BY jobName', $$.Execution.Name)",
           ResultConfiguration: {
             "OutputLocation.$": `States.Format('s3://${dataBucket.bucketName}/subtitles/{}/result/', $$.Execution.Name)`
           },
@@ -406,7 +409,7 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: ["*"],
-        actions: ["athena:StartQueryExecution"]
+        actions: ["athena:StartQueryExecution", "athena:GetQueryExecution"]
       })
     );
     stateMachine.addToRolePolicy(
@@ -417,7 +420,7 @@ export class ServerlessTranscribeStack extends cdk.Stack {
           glueTable.tableArn,
           glueDatabase.databaseArn
         ],
-        actions: ["glue:GetTable"]
+        actions: ["glue:GetTable", "glue:GetPartitions"]
       })
     );
     stateMachine.addToRolePolicy(

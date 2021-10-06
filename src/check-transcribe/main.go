@@ -25,7 +25,6 @@ func NewHandler() Handler {
 	return func(ctx context.Context, input Input) (bool, error) {
 		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
-			fmt.Println(err)
 			panic(err)
 		}
 
@@ -40,7 +39,6 @@ func NewHandler() Handler {
 		for paginator.HasMorePages() {
 			jobs, err := paginator.NextPage(ctx)
 			if err != nil {
-				fmt.Println(err)
 				panic(err)
 			}
 
