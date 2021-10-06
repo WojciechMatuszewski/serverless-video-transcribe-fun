@@ -1,6 +1,21 @@
-# Serverless transcribe
+# Serverless "Get subtitles for a video" service
 
-1. Build the ffmpeg layer
+## About
+
+This repo contains a **proof of concept** service which is able to generate subtitles for a video.
+
+![state machine](./assets/state-machine.png)
+
+## Possible optimizations
+
+- Instead of downloading the uploaded video from S3 to EFS, use _AWS DataSync_.
+
+- One might try to add partitions to the _AWS Glue_ table that _AWS Athena_ uses to crawl the subtitle chunks.
+  I was not able to make it work but you might be able to! Looking forward to hearing from you if you did.
+
+## Deployment
+
+1. Build the ffmpeg layer (needs to be done only once)
 
    ```shell
    npm run build-layer
@@ -74,10 +89,6 @@
 
 - The `startTranscribeJob` is an asynchronous task. Despite it being asynchronous, the permissions to carry out the whole flow (like uploading the result to the bucket) are checked at the invoke time. It seems to me like the _AWS Transcribe_ service uses the credentials that the request was made with to carry out all of its operations.
 
-  - Can I use `assumedBy` here?
-  - How does the "ambient" role assumption works?
-  - ConditionKey can be `null`? https://docs.aws.amazon.com/transcribe/latest/dg/security_iam_service-with-iam.html
-
 - Creating state loops with CDK is a bit weird. Since you cannot refer to the state that wraps the loops within the loop itself,
   it is created "implicitly". For example, I thought that by doing `task1.next(task2).next(choice("condition", task1).otherwise(endState))` I would need to specify the loop again with the `("condition", task1)` portion of the definition, but that is not the case.
 
@@ -96,3 +107,8 @@
 
 - Some of the _optimized_ `.sync` StepFunctions integrations are really pooling the result for you.
   A good example would be the Athena `StartQueryExecution` integration. The call is asynchronous in nature and returns an execution token.
+
+- Scanning ALL of the subtitles chunks with _AWS Athena_ in search of ones with a particular `jobName` is suboptimal.
+  While I could use partitions on the _AWS Glue_ side of things (while creating the table), the `startTranscriptionJob` would reject an S3 output with
+  a path containing `=` symbol.
+  To my best knowledge to use _AWS Glue_ table partitions, the S3 path [has to be formatted in a specific way](https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-partitions.html). Since I cannot use `=` symbol I'm not sure I can use that feature.

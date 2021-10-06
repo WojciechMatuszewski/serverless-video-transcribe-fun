@@ -427,18 +427,21 @@ export class ServerlessTranscribeStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: [dataBucket.bucketArn],
-        actions: ["s3:GetBucketLocation"]
+        actions: ["s3:ListBucket"]
       })
     );
     stateMachine.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        resources: [dataBucket.bucketArn],
+        resources: [dataBucket.bucketArn, dataBucket.arnForObjects("*")],
         actions: [
-          "s3:GetBucket",
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket",
           "s3:ListBucketMultipartUploads",
-          "s3:ListMultipartUploadParts",
-          "s3:AbortMultipartUpload"
+          "s3:AbortMultipartUpload",
+          "s3:PutObject",
+          "s3:ListMultipartUploadParts"
         ]
       })
     );
